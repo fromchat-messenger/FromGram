@@ -34,7 +34,7 @@ internal sealed class GetStoriesViewsHandler(
         foreach (var storyId in obj.Id)
         {
             var story = await queryProcessor.ProcessAsync(
-                new GetStoryByIdQuery(peerId, storyId),
+                new MyTelegram.Queries.Stories.GetStoryByIdQuery(peerId, storyId),
                 CancellationToken.None);
 
             viewsList.Add(new TStoryViews

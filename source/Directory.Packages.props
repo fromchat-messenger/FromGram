@@ -10,8 +10,9 @@
     <PackageVersion Include="ConfigureAwait.Fody" PrivateAssets="All" Version="3.3.2" />
     <PackageVersion Include="coverlet.collector" Version="6.0.4" />
     <PackageVersion Include="Cube.Timer" Version="1.0.5" />
-    <PackageVersion Include="EventFlow" Version="1.2.1" />
-    <PackageVersion Include="EventFlow.MongoDB" Version="1.2.1" />
+    <PackageVersion Include="EventFlow" Version="1.2.3" />
+    <PackageVersion Include="EventFlow.MongoDB" Version="1.2.3" />
+    
     <PackageVersion Include="Fody" Version="6.9.2" />
     <PackageVersion Include="Google.Protobuf" Version="3.31.1" />
     <PackageVersion Include="Grpc.AspNetCore" Version="2.66.0" />

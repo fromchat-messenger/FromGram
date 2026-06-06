@@ -1,7 +1,9 @@
 using MongoDB.Driver;
 using MyTelegram.Core;
+using MyTelegram.Abstractions;
 using MyTelegram.EventBus.RabbitMQ.Extensions;
 using MyTelegram.SessionServer.Extensions;
+using MyTelegram.Services.Extensions;
 using Serilog;
 using StackExchange.Redis;
 
@@ -39,6 +41,13 @@ builder.Services.AddSingleton(sp =>
 
 // 4. Core services (from MyTelegram.Core — IMessageIdHelper, IObjectMapper, etc.)
 builder.Services.AddMyTelegramCoreServices();
+
+// Register services from MyTelegram.Services (includes IDataProcessor<ISessionMessage>)
+builder.Services.AddMyTelegramHandlerServices();
+
+// RabbitMQ options binding
+builder.Services.Configure<MyTelegram.EventBus.RabbitMQ.EventBusRabbitMqOptions>(builder.Configuration.GetRequiredSection("RabbitMQ:EventBus"));
+builder.Services.Configure<MyTelegram.EventBus.RabbitMQ.RabbitMqOptions>(builder.Configuration.GetRequiredSection("RabbitMQ:Connections:Default"));
 
 // 5. EventBus (RabbitMQ-backed, from MyTelegram.EventBus.RabbitMQ)
 builder.Services.AddMyTelegramRabbitMqEventBus();

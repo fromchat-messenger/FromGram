@@ -20,7 +20,7 @@
             "isBackground": true,
             "presentation": {
                 "reveal": "always",
-                "panel": "new"
+                "panel": "shared"
             }
         }
     ]

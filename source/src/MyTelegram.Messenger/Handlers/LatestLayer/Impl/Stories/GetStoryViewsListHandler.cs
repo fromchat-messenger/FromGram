@@ -32,12 +32,12 @@ internal sealed class GetStoryViewsListHandler(
 
         // Get story to verify it exists
         var story = await queryProcessor.ProcessAsync(
-            new GetStoryByIdQuery(peerId, obj.Id),
+            new MyTelegram.Queries.Stories.GetStoryByIdQuery(peerId, obj.Id),
             CancellationToken.None);
 
         if (story == null || story.IsDeleted)
         {
-            RpcErrors.RpcErrors400.StoryNotFound.ThrowRpcError();
+            RpcErrors.RpcErrors400.StoryIdInvalid.ThrowRpcError();
         }
 
         // Individual viewer tracking requires a StoryViewerReadModel.
