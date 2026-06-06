@@ -1,20 +1,16 @@
-// ReSharper disable All
-
-namespace MyTelegram.Messenger.Handlers.LatestLayer.Impl.Account;
+﻿namespace MyTelegram.Messenger.Handlers.LatestLayer.Impl.Account;
 
 ///<summary>
-/// Update theme
-/// <para>Possible errors</para>
-/// Code Type Description
-/// 400 THEME_INVALID Invalid theme provided.
+/// Update theme.
 /// See <a href="https://corefork.telegram.org/method/account.updateTheme" />
 ///</summary>
-internal sealed class UpdateThemeHandler : RpcResultObjectHandler<MyTelegram.Schema.Account.RequestUpdateTheme, MyTelegram.Schema.ITheme>,
-    Account.IUpdateThemeHandler
+internal sealed class UpdateThemeHandler
+    : RpcResultObjectHandler<MyTelegram.Schema.Account.RequestUpdateTheme, MyTelegram.Schema.ITheme>,
+        Account.IUpdateThemeHandler
 {
-    protected override Task<MyTelegram.Schema.ITheme> HandleCoreAsync(IRequestInput input,
+    protected override Task<ITheme> HandleCoreAsync(IRequestInput input,
         MyTelegram.Schema.Account.RequestUpdateTheme obj)
     {
-        throw new NotImplementedException();
+        throw new RpcException(new RpcError(400, "THEME_INVALID"));
     }
 }

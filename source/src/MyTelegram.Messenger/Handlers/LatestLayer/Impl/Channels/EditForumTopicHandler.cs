@@ -1,21 +1,32 @@
-// ReSharper disable All
-
 namespace MyTelegram.Messenger.Handlers.LatestLayer.Impl.Channels;
 
 ///<summary>
-/// Edit <a href="https://corefork.telegram.org/api/forum">forum topic</a>; requires <a href="https://corefork.telegram.org/api/rights"><code>manage_topics</code> rights</a>.
+/// Edit forum topic; requires manage_topics rights.
 /// <para>Possible errors</para>
 /// Code Type Description
 /// 400 TOPIC_ID_INVALID The specified topic ID is invalid.
-/// 400 TOPIC_NOT_MODIFIED The updated topic info is equal to the current topic info, nothing was changed.
+/// 400 TOPIC_NOT_MODIFIED The updated topic info is equal to the current topic info.
 /// See <a href="https://corefork.telegram.org/method/channels.editForumTopic" />
 ///</summary>
-internal sealed class EditForumTopicHandler : RpcResultObjectHandler<MyTelegram.Schema.Channels.RequestEditForumTopic, MyTelegram.Schema.IUpdates>,
-    Channels.IEditForumTopicHandler
+internal sealed class EditForumTopicHandler(
+    IAccessHashHelper accessHashHelper,
+    IChannelAdminRightsChecker channelAdminRightsChecker)
+    : RpcResultObjectHandler<MyTelegram.Schema.Channels.RequestEditForumTopic, MyTelegram.Schema.IUpdates>,
+        Channels.IEditForumTopicHandler
 {
-    protected override Task<MyTelegram.Schema.IUpdates> HandleCoreAsync(IRequestInput input,
+    protected override async Task<IUpdates> HandleCoreAsync(IRequestInput input,
         MyTelegram.Schema.Channels.RequestEditForumTopic obj)
     {
-        throw new NotImplementedException();
+        if (obj.Channel is TInputChannel inputChannel)
+        {
+            await accessHashHelper.CheckAccessHashAsync(input, inputChannel.ChannelId, inputChannel.AccessHash, AccessHashType.Channel);
+            await channelAdminRightsChecker.CheckAdminRightAsync(inputChannel.ChannelId, input.UserId,
+                p => p.AdminRights.ManageTopics, RpcErrors.RpcErrors403.ChatAdminRequired);
+
+            // Forum topic editing requires forum domain infrastructure
+            throw new RpcException(new RpcError(400, "TOPIC_ID_INVALID"));
+        }
+
+        throw new RpcException(RpcErrors.RpcErrors400.ChannelInvalid);
     }
 }

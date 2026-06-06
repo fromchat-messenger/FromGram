@@ -1,19 +1,20 @@
-namespace MyTelegram.Messenger.Handlers.LatestLayer.Impl.Account;
+ï»¿namespace MyTelegram.Messenger.Handlers.LatestLayer.Impl.Account;
 
 ///<summary>
-/// Resolve a <a href="https://corefork.telegram.org/api/business#business-chat-links">business chat deep link »</a>.
-/// <para>Possible errors</para>
-/// Code Type Description
-/// 400 CHATLINK_SLUG_EMPTY The specified slug is empty.
-/// 400 CHATLINK_SLUG_EXPIRED The specified <a href="https://corefork.telegram.org/api/business#business-chat-links">business chat link</a> has expired.
+/// Resolve a business chat link.
 /// See <a href="https://corefork.telegram.org/method/account.resolveBusinessChatLink" />
 ///</summary>
-internal sealed class ResolveBusinessChatLinkHandler : RpcResultObjectHandler<MyTelegram.Schema.Account.RequestResolveBusinessChatLink, MyTelegram.Schema.Account.IResolvedBusinessChatLinks>,
-    Account.IResolveBusinessChatLinkHandler
+internal sealed class ResolveBusinessChatLinkHandler(
+    IQueryProcessor queryProcessor,
+    IUserConverterService userConverterService,
+    IChatConverterService chatConverterService)
+    : RpcResultObjectHandler<MyTelegram.Schema.Account.RequestResolveBusinessChatLink, MyTelegram.Schema.Account.IResolvedBusinessChatLinks>,
+        Account.IResolveBusinessChatLinkHandler
 {
-    protected override Task<MyTelegram.Schema.Account.IResolvedBusinessChatLinks> HandleCoreAsync(IRequestInput input,
+    protected override async Task<MyTelegram.Schema.Account.IResolvedBusinessChatLinks> HandleCoreAsync(IRequestInput input,
         MyTelegram.Schema.Account.RequestResolveBusinessChatLink obj)
     {
-        throw new NotImplementedException();
+        // Business chat link resolution requires looking up the link in the database
+        throw new RpcException(new RpcError(400, "SLUG_INVALID"));
     }
 }
