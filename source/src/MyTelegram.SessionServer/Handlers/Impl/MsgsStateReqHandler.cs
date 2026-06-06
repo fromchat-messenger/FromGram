@@ -31,7 +31,7 @@ public sealed class MsgsStateReqHandler : ISessionHandler<TMsgsStateReq, IObject
         var result = new TMsgsStateInfo
         {
             ReqMsgId = input.ReqMsgId,
-            Info = info
+            Info = Convert.ToBase64String(info)
         };
 
         _logger.LogDebug("MsgsStateReq: {Count} messages, authKey={AuthKeyId}",

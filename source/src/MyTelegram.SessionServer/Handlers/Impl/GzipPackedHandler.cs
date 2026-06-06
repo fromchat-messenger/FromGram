@@ -19,7 +19,7 @@ public sealed class GzipPackedHandler : IUnwrappingSessionHandler<TGzipPacked>
     public async Task HandleAsync(IRequestInput input, TGzipPacked request,
         Func<IRequestInput, IObject, Task> dispatch)
     {
-        if (request.PackedData == null || request.PackedData.Length == 0)
+        if (request.PackedData.IsEmpty)
         {
             _logger.LogWarning("Empty gzip_packed data from authKey={AuthKeyId}", input.AuthKeyId);
             return;
@@ -27,7 +27,7 @@ public sealed class GzipPackedHandler : IUnwrappingSessionHandler<TGzipPacked>
 
         try
         {
-            using var compressedStream = new MemoryStream(request.PackedData);
+            using var compressedStream = new MemoryStream(request.PackedData.ToArray());
             using var gzipStream = new GZipStream(compressedStream, CompressionMode.Decompress);
             using var decompressedStream = new MemoryStream();
             await gzipStream.CopyToAsync(decompressedStream).ConfigureAwait(false);

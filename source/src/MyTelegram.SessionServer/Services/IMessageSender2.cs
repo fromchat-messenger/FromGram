@@ -23,6 +23,11 @@ public interface IMessageSender2
     /// <summary>Push a layered message to all online sessions of a peer.</summary>
     Task<long> PushMessageToPeerAsync(LayeredPushMessageCreatedIntegrationEvent eventData);
 
+    /// <summary>Send raw pre-serialized data (e.g., RpcResult already serialized by Messenger).</summary>
+    Task<long> SendRawDataToClientAsync(
+        string connectionId, long reqMsgId, long authKeyId,
+        long requestSessionId, ReadOnlyMemory<byte> data, int seqNumber);
+
     /// <summary>Notify client that auth key is no longer valid.</summary>
     Task SendAuthKeyNotFoundMessageToClientAsync(long authKeyId, string connectionId);
 

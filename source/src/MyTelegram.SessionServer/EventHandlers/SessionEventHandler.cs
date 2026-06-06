@@ -33,6 +33,7 @@ public sealed class SessionEventHandler :
     private readonly IOnlineUserHelper _onlineUserHelper;
     private readonly IChatMemberHelper _chatMemberHelper;
     private readonly IMessageSender2 _messageSender;
+    private readonly IPendingRequestTracker _pendingRequestTracker;
     private readonly ILogger<SessionEventHandler> _logger;
 
     public SessionEventHandler(
@@ -41,6 +42,7 @@ public sealed class SessionEventHandler :
         IOnlineUserHelper onlineUserHelper,
         IChatMemberHelper chatMemberHelper,
         IMessageSender2 messageSender,
+        IPendingRequestTracker pendingRequestTracker,
         ILogger<SessionEventHandler> logger)
     {
         _authKeyHelper = authKeyHelper;
@@ -48,6 +50,7 @@ public sealed class SessionEventHandler :
         _onlineUserHelper = onlineUserHelper;
         _chatMemberHelper = chatMemberHelper;
         _messageSender = messageSender;
+        _pendingRequestTracker = pendingRequestTracker;
         _logger = logger;
     }
 
@@ -167,7 +170,7 @@ public sealed class SessionEventHandler :
     }
 
     /// <summary>Auth key unregistered (user logged out from another session).</summary>
-    public async Task HandleEventAsync(UnRegisterAuthKeyEvent e)
+    public Task HandleEventAsync(UnRegisterAuthKeyEvent e)
     {
         _sessionService.Deactivate(e.PermAuthKeyId, revoked: false);
         _authKeyHelper.RemoveAuthKeyItem(e.PermAuthKeyId);
@@ -187,6 +190,8 @@ public sealed class SessionEventHandler :
 
         _logger.LogInformation("Auth key unregistered: permAuthKey={PermAuthKeyId} userId={UserId}",
             e.PermAuthKeyId, e.UserId);
+
+        return Task.CompletedTask;
     }
 
     /// <summary>Sessions revoked (auth.resetAuthorizations).</summary>
@@ -211,13 +216,40 @@ public sealed class SessionEventHandler :
     /// <summary>RPC result received from the Messenger server — forward to client.</summary>
     public async Task HandleEventAsync(DataResultResponseReceivedEvent e)
     {
-        // The result needs to be routed back to the originating client connection.
-        // This is a simplified implementation — the original binary tracks reqMsgId→connectionId
-        // mapping to route responses correctly.
+        // Route the RPC result back to the originating client connection.
+        // The EncryptedMessageProcessor tracks reqMsgId→connectionInfo when dispatching.
         _logger.LogDebug("DataResultResponse received: reqMsgId={ReqMsgId}", e.ReqMsgId);
 
-        // TODO: Look up the connection info for this reqMsgId and forward the result.
-        // The mapping is maintained by the EncryptedMessageProcessor when dispatching.
+        if (!_pendingRequestTracker.TryGet(e.ReqMsgId, out var requestInfo))
+        {
+            _logger.LogWarning(
+                "DataResultResponse: no pending request found for reqMsgId={ReqMsgId}, cannot route response",
+                e.ReqMsgId);
+            return;
+        }
+
+        // Send the response back to the client.
+        // The event can carry either a deserialized DataObject or raw pre-serialized Data.
+        // The SessionMessageDataProcessor in the Messenger may gzip-compress large responses
+        // and send them as raw bytes.
+        if (e.DataObject != null)
+        {
+            await _messageSender.SendRpcMessageToClientAsync(
+                requestInfo.ConnectionId, e.ReqMsgId, requestInfo.AuthKeyId,
+                requestInfo.SessionId, e.DataObject, requestInfo.SeqNumber + 1)
+                .ConfigureAwait(false);
+        }
+        else if (!e.Data.IsEmpty)
+        {
+            // Raw data path: the result is already serialized (possibly gzip-compressed RpcResult)
+            await _messageSender.SendRawDataToClientAsync(
+                requestInfo.ConnectionId, e.ReqMsgId, requestInfo.AuthKeyId,
+                requestInfo.SessionId, e.Data, requestInfo.SeqNumber + 1)
+                .ConfigureAwait(false);
+        }
+
+        // Dispose MemoryOwner if present
+        e.MemoryOwner?.Dispose();
     }
 
     /// <summary>Push notification to be sent to all online sessions of a peer.</summary>
@@ -244,11 +276,11 @@ public sealed class SessionEventHandler :
     {
         switch (changeType)
         {
-            case MemberStateChangeType.Added:
+            case MemberStateChangeType.Add:
                 foreach (var uid in memberIds)
                     _chatMemberHelper.AddMember(chatId, uid);
                 break;
-            case MemberStateChangeType.Removed:
+            case MemberStateChangeType.Remove:
                 foreach (var uid in memberIds)
                     _chatMemberHelper.RemoveMember(chatId, uid);
                 break;

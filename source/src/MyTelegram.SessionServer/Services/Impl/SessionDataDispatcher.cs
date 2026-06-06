@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Options;
 using MyTelegram.Core;
 using MyTelegram.EventBus;
 using MyTelegram.SessionServer.Options;

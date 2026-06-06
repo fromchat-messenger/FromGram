@@ -22,12 +22,12 @@ public sealed class ResetAuthorizationsHandler : ISessionHandler<Schema.Auth.Req
         _logger = logger;
     }
 
-    public async Task<IObject> HandleAsync(IRequestInput input, Schema.Auth.RequestResetAuthorizations request)
+    public Task<IObject> HandleAsync(IRequestInput input, Schema.Auth.RequestResetAuthorizations request)
     {
         _logger.LogInformation("Auth.ResetAuthorizations: authKey={AuthKeyId}", input.AuthKeyId);
 
         // This is typically also dispatched to the Messenger server for full processing.
         // The SessionServer version just ensures local event propagation.
-        return new TBoolTrue();
+        return Task.FromResult<IObject>(new TBoolTrue());
     }
 }

@@ -32,12 +32,12 @@ public static class MyTelegramSessionServerExtensions
         services.AddSingleton<IOnlineUserHelper, OnlineUserHelper>();
         services.AddSingleton<IChatMemberHelper, ChatMemberHelper>();
         services.AddSingleton<IRequestCacheAppService, RequestCacheAppService>();
+        services.AddSingleton<IPendingRequestTracker, PendingRequestTracker>();
 
         // Core services (singletons for in-memory state)
         services.AddSingleton<ISessionService, SessionService>();
         services.AddSingleton<IServerSaltHelper, ServerSaltHelper>();
         services.AddSingleton<PermissionChecker>();
-        services.AddSingleton<Services.MessageIdGenerator>();
         services.AddSingleton<ISessionDataProcessor, SessionDataProcessor>();
 
         // Scoped/transient services

@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Security.Cryptography;
+using Microsoft.Extensions.Options;
 using MyTelegram.Abstractions;
 using MyTelegram.Core;
 using MyTelegram.Schema;
@@ -40,6 +41,8 @@ public sealed class EncryptedMessageProcessor : IEncryptedMessageProcessor
     private readonly IExceptionProcessor _exceptionProcessor;
     private readonly IScheduleAppService _scheduleAppService;
     private readonly ILogger<EncryptedMessageProcessor> _logger;
+    private readonly IGZipHelper _gzipHelper;
+    private readonly IPendingRequestTracker _pendingRequestTracker;
     private readonly IOptionsMonitor<MyTelegramSessionServerOptions> _options;
 
     public EncryptedMessageProcessor(
@@ -53,6 +56,8 @@ public sealed class EncryptedMessageProcessor : IEncryptedMessageProcessor
         IMtpHelper mtpHelper,
         IExceptionProcessor exceptionProcessor,
         IScheduleAppService scheduleAppService,
+        IGZipHelper gzipHelper,
+        IPendingRequestTracker pendingRequestTracker,
         ILogger<EncryptedMessageProcessor> logger,
         IOptionsMonitor<MyTelegramSessionServerOptions> options)
     {
@@ -66,6 +71,8 @@ public sealed class EncryptedMessageProcessor : IEncryptedMessageProcessor
         _mtpHelper = mtpHelper;
         _exceptionProcessor = exceptionProcessor;
         _scheduleAppService = scheduleAppService;
+        _gzipHelper = gzipHelper;
+        _pendingRequestTracker = pendingRequestTracker;
         _logger = logger;
         _options = options;
     }
@@ -230,6 +237,10 @@ public sealed class EncryptedMessageProcessor : IEncryptedMessageProcessor
             }
             else
             {
+                // Track the request for response routing
+                _pendingRequestTracker.Track(reqInput.ReqMsgId, reqInput.ConnectionId,
+                    reqInput.AuthKeyId, reqInput.SessionId, reqInput.SeqNumber);
+
                 // Route to Messenger server
                 var sessionData = new InternalSessionData(reqInput, requestData);
                 await _sessionDataDispatcher.DispatchAsync(sessionData).ConfigureAwait(false);
@@ -350,13 +361,13 @@ public sealed class EncryptedMessageProcessor : IEncryptedMessageProcessor
         iv[..16].CopyTo(xPrev);   // IV first 16 bytes
         iv[16..32].CopyTo(yPrev); // IV last 16 bytes
 
+        Span<byte> temp = stackalloc byte[16];
         for (var i = 0; i < data.Length; i += 16)
         {
             var block = data.Slice(i, 16);
             var outBlock = output.Slice(i, 16);
 
             // y_i = AES_decrypt(x_i XOR y_{i-1}) XOR x_{i-1}
-            Span<byte> temp = stackalloc byte[16];
             for (var j = 0; j < 16; j++)
                 temp[j] = (byte)(block[j] ^ yPrev[j]);
 
@@ -531,7 +542,7 @@ public sealed class EncryptedMessageProcessor : IEncryptedMessageProcessor
                 ObjectId = innerObjectId,
                 UserId = reqInput.UserId,
                 ReqMsgId = innerMsg.MsgId,
-                SeqNumber = innerMsg.Seqno,
+                SeqNumber = innerMsg.SeqNo,
                 AuthKeyId = reqInput.AuthKeyId,
                 PermAuthKeyId = reqInput.PermAuthKeyId,
                 Layer = reqInput.Layer,
@@ -553,7 +564,7 @@ public sealed class EncryptedMessageProcessor : IEncryptedMessageProcessor
             {
                 await _messageSender.SendRpcMessageToClientAsync(
                     reqInput.ConnectionId, innerMsg.MsgId, reqInput.AuthKeyId,
-                    reqInput.SessionId, error, innerMsg.Seqno + 1).ConfigureAwait(false);
+                    reqInput.SessionId, error, innerMsg.SeqNo + 1).ConfigureAwait(false);
                 continue;
             }
 
@@ -564,6 +575,9 @@ public sealed class EncryptedMessageProcessor : IEncryptedMessageProcessor
             }
             else
             {
+                _pendingRequestTracker.Track(innerInput.ReqMsgId, innerInput.ConnectionId,
+                    innerInput.AuthKeyId, innerInput.SessionId, innerInput.SeqNumber);
+
                 var sessionData = new InternalSessionData(innerInput, innerMsg.Body);
                 await _sessionDataDispatcher.DispatchAsync(sessionData).ConfigureAwait(false);
             }
@@ -612,10 +626,45 @@ public sealed class EncryptedMessageProcessor : IEncryptedMessageProcessor
             // Acknowledgments are noted but don't need a response
             _logger.LogDebug("Received MsgsAck from authKey={AuthKeyId}", reqInput.AuthKeyId);
         }
-        else if (objectId == ObjectIdConsts.GzipPackedId)
+        else if (objectId == ObjectIdConsts.GzipPackedId && requestData is TGzipPacked gzipPacked)
         {
-            // TODO: Decompress gzip_packed and re-process the inner object
-            _logger.LogDebug("Received gzip_packed from authKey={AuthKeyId}", reqInput.AuthKeyId);
+            // Decompress gzip_packed and re-process the inner object
+            _logger.LogDebug("Received gzip_packed from authKey={AuthKeyId}, decompressing", reqInput.AuthKeyId);
+
+            var packedData = gzipPacked.PackedData;
+            if (!packedData.IsEmpty)
+            {
+                // Determine uncompressed size
+                if (!_gzipHelper.TryGetUncompressedLength(packedData.Span, out var uncompressedLength))
+                    uncompressedLength = packedData.Length * 4; // Estimate
+
+                var decompressedBuffer = new byte[uncompressedLength];
+                _gzipHelper.Decompress(packedData, decompressedBuffer, out var actualLength);
+
+                // Parse the decompressed TL object
+                var decompressedMemory = new ReadOnlyMemory<byte>(decompressedBuffer, 0, actualLength);
+                var innerObjectId = BinaryPrimitives.ReadUInt32LittleEndian(decompressedMemory.Span);
+                var innerObject = Deserialize(decompressedMemory);
+
+                if (innerObject == null)
+                {
+                    _logger.LogWarning("gzip_packed: failed to deserialize inner object 0x{ObjectId:X8}",
+                        innerObjectId);
+                }
+                else if (IsLocallyHandled(innerObjectId))
+                {
+                    await ProcessLocallyAsync(innerObjectId, innerObject, reqInput, session)
+                        .ConfigureAwait(false);
+                }
+                else
+                {
+                    _pendingRequestTracker.Track(reqInput.ReqMsgId, reqInput.ConnectionId,
+                        reqInput.AuthKeyId, reqInput.SessionId, reqInput.SeqNumber);
+
+                    var sessionData = new InternalSessionData(reqInput, innerObject);
+                    await _sessionDataDispatcher.DispatchAsync(sessionData).ConfigureAwait(false);
+                }
+            }
         }
     }
 
