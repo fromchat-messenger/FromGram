@@ -3,7 +3,6 @@ using MyTelegram.Schema;
 using MyTelegram.Domain.Shared.Events;
 using MyTelegram.EventBus;
 using MyTelegram.ReadModel.MongoDB;
-using MyTelegram.ReadModel.Impl;
 using MongoDB.Driver;
 using System.Text.Json;
 
@@ -487,11 +486,11 @@ public class MTProtoBridge(
         };
     }
     
-    private async Task<BotReadModel?> GetBotInfoAsync(long botUserId)
+    private async Task<MyTelegram.ReadModel.Impl.BotReadModel?> GetBotInfoAsync(long botUserId)
     {
         try
         {
-            var botsCollection = database.GetCollection<BotReadModel>("ReadModel-BotReadModel");
+            var botsCollection = database.GetCollection<MyTelegram.ReadModel.Impl.BotReadModel>("ReadModel-BotReadModel");
             return await botsCollection.Find(b => b.UserId == botUserId).FirstOrDefaultAsync();
         }
         catch (Exception ex)

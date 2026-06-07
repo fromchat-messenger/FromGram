@@ -49,6 +49,7 @@ COPY src/MyTelegram.QueryHandlers.MongoDB/. ./src/MyTelegram.QueryHandlers.Mongo
 COPY src/MyTelegram.MTProto/. ./src/MyTelegram.MTProto/
 COPY src/Microsoft.Cuckoo/. ./src/Microsoft.Cuckoo/
 COPY src/MyTelegram.Domain/. ./src/MyTelegram.Domain/
+COPY src/MyTelegram.Domain.Shared/. ./src/MyTelegram.Domain.Shared/
 COPY src/MyTelegram.Messenger/. ./src/MyTelegram.Messenger/
 COPY src/MyTelegram.Queries/. ./src/MyTelegram.Queries/
 COPY src/MyTelegram.QueryHandlers.MongoDB/. ./src/MyTelegram.QueryHandlers.MongoDB/

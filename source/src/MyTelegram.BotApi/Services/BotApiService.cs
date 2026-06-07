@@ -1,8 +1,9 @@
 using MyTelegram.BotApi.Helpers;
+using MyTelegram.BotApi.Services;
 using MongoDB.Driver;
 using MyTelegram.Domain.Shared.BotApi;
 using MyTelegram.Domain.Shared.Events;
-using MyTelegram.ReadModel.Impl;
+//using MyTelegram.ReadModel.Impl;
 using MyTelegram.ReadModel.MongoDB;
 using MyTelegram.Schema;
 using MyTelegram.EventBus;
@@ -1221,9 +1222,9 @@ public class BotApiService(
 
     #region Helper Methods
 
-    private async Task<BotReadModel> GetBotByTokenAsync(string token)
+    private async Task<MyTelegram.ReadModel.Impl.BotReadModel> GetBotByTokenAsync(string token)
     {
-        var botsCollection = database.GetCollection<BotReadModel>("ReadModel-BotReadModel");
+        var botsCollection = database.GetCollection<MyTelegram.ReadModel.Impl.BotReadModel>("ReadModel-BotReadModel");
         var bot = await botsCollection.Find(b => b.Token == token).FirstOrDefaultAsync();
 
         if (bot == null)
