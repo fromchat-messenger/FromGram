@@ -17,10 +17,11 @@ internal sealed class ReportHandler(
 
         // Log the report for administrative review on self-hosted
         logger.LogInformation(
-            "StoryReport: UserId={UserId} reported peer={PeerId} stories=[{StoryIds}]",
+            "StoryReport: UserId={UserId} reported peer={PeerId} stories=[{StoryIds}] message={Message}",
             input.UserId,
             peer.PeerId,
-            string.Join(",", obj.Id));
+            string.Join(",", obj.Id),
+            obj.Message ?? "");
 
         // On self-hosted, reporting is accepted and logged.
         // Server admins can review logs for moderation.

@@ -1,5 +1,3 @@
-using MyTelegram.Queries.Stories;
-
 namespace MyTelegram.Messenger.Handlers.LatestLayer.Impl.Stories;
 
 ///<summary>
@@ -7,8 +5,7 @@ namespace MyTelegram.Messenger.Handlers.LatestLayer.Impl.Stories;
 /// See <a href="https://corefork.telegram.org/method/stories.getStoryViewsList" />
 ///</summary>
 internal sealed class GetStoryViewsListHandler(
-    IQueryProcessor queryProcessor,
-    IUserConverterService userConverterService)
+    IQueryProcessor queryProcessor)
     : RpcResultObjectHandler<MyTelegram.Schema.Stories.RequestGetStoryViewsList, MyTelegram.Schema.Stories.IStoryViewsList>,
     Stories.IGetStoryViewsListHandler
 {
@@ -30,7 +27,7 @@ internal sealed class GetStoryViewsListHandler(
             peerId = input.UserId;
         }
 
-        // Get story to verify it exists
+        // Get story to verify it exists — use Stories namespace to avoid ambiguity
         var story = await queryProcessor.ProcessAsync(
             new MyTelegram.Queries.Stories.GetStoryByIdQuery(peerId, obj.Id),
             CancellationToken.None);
@@ -40,7 +37,7 @@ internal sealed class GetStoryViewsListHandler(
             RpcErrors.RpcErrors400.StoryIdInvalid.ThrowRpcError();
         }
 
-        // Individual viewer tracking requires a StoryViewerReadModel.
+        // Individual viewer tracking requires a StoryViewDetailsReadModel in MongoDB.
         // Counts are accurate from the story aggregate; the per-user list is empty.
         return new Schema.Stories.TStoryViewsList
         {

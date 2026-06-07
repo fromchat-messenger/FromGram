@@ -1,5 +1,3 @@
-using MyTelegram.Queries.Stories;
-
 namespace MyTelegram.Messenger.Handlers.LatestLayer.Impl.Stories;
 
 ///<summary>
