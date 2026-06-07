@@ -1,10 +1,10 @@
-# Opengram
+# FromGram
 
 *Читать на других языках: [English](README.en.md)*
 
-Opengram — это самостоятельный сервер Telegram, написанный на C# (.NET 9). Проект является форком [mytelegram](https://github.com/loyldg/mytelegram) и реализует серверную часть API Telegram (MTProto), которую можно развернуть на собственной инфраструктуре.
+FromGram — это самостоятельный сервер Telegram, написанный на C# (.NET 9). Проект является форком [Opengram](https://github.com/opengram-server/opengram) и [mytelegram](https://github.com/loyldg/mytelegram) и реализует серверную часть API Telegram (MTProto), которую можно развернуть на собственной инфраструктуре.
 
-[Telegram-канал](https://t.me/opengrame)
+[Telegram-канал Opengram](https://t.me/opengrame)
 
 ## Возможности
 
