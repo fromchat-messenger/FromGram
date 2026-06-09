@@ -1,4 +1,4 @@
-﻿namespace MyTelegram.MTProto;
+namespace MyTelegram.MTProto;
 
 public class MtpMessageParser(
     ILogger<MtpMessageParser> logger,
@@ -42,11 +42,23 @@ public class MtpMessageParser(
             var authKeyId = BinaryPrimitives.ReadInt64LittleEndian(span);
             if (authKeyId == 0)
             {
-                message = unencryptedMessageParser.Parse(decryptedMemory);
+                var unencryptedMessage = unencryptedMessageParser.Parse(decryptedMemory);
+                logger.LogInformation(
+                    "[ConnectionId: {ConnectionId}] Parsed unencrypted MTProto message, objectId: 0x{ObjectId:x8}, messageId: {MessageId}",
+                    clientData.ConnectionId,
+                    unencryptedMessage.ObjectId,
+                    unencryptedMessage.MessageId);
+                message = unencryptedMessage;
             }
             else
             {
                 message = encryptedMessageParser.Parse(decryptedMemory);
+                logger.LogInformation(
+                    "[ConnectionId: {ConnectionId}] Parsed encrypted message, authKeyId: {AuthKeyId:x16}, wireLen: {WireLen}, plaintext: {Hex}",
+                    clientData.ConnectionId,
+                    authKeyId,
+                    length,
+                    Convert.ToHexString(span[..Math.Min(span.Length, 64)]));
             }
             message.MemoryOwner = memoryOwner;
 
@@ -126,13 +138,12 @@ public class MtpMessageParser(
         else
         {
             logger.LogWarning(
-                "[ConnectionId: {ConnectionId}] Invalid packet, length is greater than {MaxFirstByte}, but first byte is not {MaxFirstByte}, first byte: {FirstByte}",
+                "[ConnectionId: {ConnectionId}] Invalid abridged packet header, first byte: 0x{FirstByte:x2}, sendCount: {SendCount}",
                 d.ConnectionId,
-                maxFirstByteValue,
-                maxFirstByteValue,
-                firstByte
-            );
-            throw new ArgumentException($"Invalid packet, first byte: {firstByte}");
+                firstBytes[0],
+                d.SendCount);
+            skipCount = 0;
+            return -1;
         }
 
         return packetLength;
@@ -200,6 +211,7 @@ public class MtpMessageParser(
         d.SendKey = data.SendKey;
         d.ReceiveKey = data.ReceiveKey;
         d.SendCount = data.SendCount;
+        d.ReceiveCount = data.ReceiveCount;
         d.ReceiveIv = data.ReceiveIv;
         d.SendIv = data.SendIv;
 
@@ -225,6 +237,12 @@ public class MtpMessageParser(
         }
 
         var packetLength = GetPacketLength(buffer, clientData, out var skipCount);
+        if (packetLength < 0)
+        {
+            data = default;
+            return false;
+        }
+
         if (packetLength > MaxPacketLength)
         {
             logger.LogWarning(

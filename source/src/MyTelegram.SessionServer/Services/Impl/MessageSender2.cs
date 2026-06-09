@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Buffers.Binary;
+using System.Collections.Concurrent;
 using MyTelegram.Abstractions;
 using MyTelegram.Core;
 using MyTelegram.EventBus;
@@ -19,6 +20,9 @@ namespace MyTelegram.SessionServer.Services.Impl;
 /// </summary>
 public sealed class MessageSender2 : IMessageSender2
 {
+    private static readonly ConcurrentDictionary<string, long> AuthKeyNotFoundNotifiedAt = new();
+    private static readonly TimeSpan AuthKeyNotFoundNotifyCooldown = TimeSpan.FromSeconds(5);
+
     private readonly ISessionService _sessionService;
     private readonly IAuthKeyHelper _authKeyHelper;
     private readonly IOnlineUserHelper _onlineUserHelper;
@@ -211,6 +215,15 @@ public sealed class MessageSender2 : IMessageSender2
 
     public async Task SendAuthKeyNotFoundMessageToClientAsync(long authKeyId, string connectionId)
     {
+        var now = Environment.TickCount64;
+        if (AuthKeyNotFoundNotifiedAt.TryGetValue(connectionId, out var lastNotifiedAt) &&
+            now - lastNotifiedAt < AuthKeyNotFoundNotifyCooldown.TotalMilliseconds)
+        {
+            return;
+        }
+
+        AuthKeyNotFoundNotifiedAt[connectionId] = now;
+
         _logger.LogWarning(
             "Auth key not found, notifying client: authKey={AuthKeyId} conn={ConnectionId}",
             authKeyId, connectionId);

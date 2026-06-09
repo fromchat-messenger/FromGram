@@ -255,6 +255,8 @@ services:
     environment:
       Serilog__MinimumLevel__Default: ${Serilog__MinimumLevel__Default}
       ConnectionStrings__Default: ${ConnectionStrings__Default}
+      MongoDB__Connection: ${ConnectionStrings__Default}
+      MongoDB__DatabaseName: tg
       # App__ThisDcId: ${App__ThisDcId}
       # App__MediaOnly: ${App__MediaOnly}
       App__DatabaseName: tg

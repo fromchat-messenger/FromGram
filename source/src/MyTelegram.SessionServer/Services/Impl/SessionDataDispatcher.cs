@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Options;
 using MyTelegram.Core;
 using MyTelegram.EventBus;
+using MyTelegram.Schema;
+using MyTelegram.Schema.Extensions;
 using MyTelegram.SessionServer.Options;
 
 namespace MyTelegram.SessionServer.Services.Impl;
@@ -35,46 +37,26 @@ public sealed class SessionDataDispatcher : ISessionDataDispatcher
     {
         var objectId = sessionData.ObjectId;
         var input = sessionData.RequestInput;
+        var data = sessionData.RequestData.ToBytes() ?? [];
 
         _logger.LogDebug(
-            "Dispatching objectId=0x{ObjectId:X8} user={UserId} authKey={AuthKeyId}",
-            objectId, input.UserId, input.AuthKeyId);
+            "Dispatching objectId=0x{ObjectId:X8} user={UserId} authKey={AuthKeyId} dataLen={DataLen}",
+            objectId, input.UserId, input.AuthKeyId, data.Length);
 
         if (ObjectIdConsts.CommandServerHandlers.ContainsKey(objectId))
         {
-            // Route to command server
-            var evt = MessengerCommandDataReceivedEvent.Create();
-            evt.ConnectionId = input.ConnectionId;
-            evt.RequestId = input.RequestId;
-            evt.ObjectId = objectId;
-            evt.UserId = input.UserId;
-            evt.ReqMsgId = input.ReqMsgId;
-            evt.SeqNumber = input.SeqNumber;
-            evt.AuthKeyId = input.AuthKeyId;
-            evt.PermAuthKeyId = input.PermAuthKeyId;
-            evt.Layer = input.Layer;
-            evt.Date = input.Date;
-            evt.DeviceType = input.DeviceType;
-            evt.ClientIp = input.ClientIp;
-            evt.SessionId = input.SessionId;
-            evt.AccessHashKeyId = input.AccessHashKeyId;
-            // Data is the serialized bytes of the request — for gRPC transport
-            // the Messenger server deserializes from the event data field.
-            // In the local pipeline, RequestData is already deserialized.
-            await _eventBus.PublishAsync(evt).ConfigureAwait(false);
+            await _eventBus.PublishAsync(CreateCommandEvent(input, objectId, data))
+                .ConfigureAwait(false);
         }
         else if (IsStickerObjectId(objectId))
         {
-            var evt = StickerDataReceivedEvent.Create();
-            CopyInputToEvent(input, evt, objectId);
-            await _eventBus.PublishAsync(evt).ConfigureAwait(false);
+            await _eventBus.PublishAsync(CreateStickerEvent(input, objectId, data))
+                .ConfigureAwait(false);
         }
         else
         {
-            // Default: query server
-            var evt = MessengerQueryDataReceivedEvent.Create();
-            CopyInputToEvent(input, evt, objectId);
-            await _eventBus.PublishAsync(evt).ConfigureAwait(false);
+            await _eventBus.PublishAsync(CreateQueryEvent(input, objectId, data))
+                .ConfigureAwait(false);
         }
     }
 
@@ -84,21 +66,21 @@ public sealed class SessionDataDispatcher : ISessionDataDispatcher
         return opts.StickerServerObjectIds.Contains(objectId);
     }
 
-    private static void CopyInputToEvent(IRequestInput input, DataReceivedEvent evt, uint objectId)
-    {
-        evt.ConnectionId = input.ConnectionId;
-        evt.RequestId = input.RequestId;
-        evt.ObjectId = objectId;
-        evt.UserId = input.UserId;
-        evt.ReqMsgId = input.ReqMsgId;
-        evt.SeqNumber = input.SeqNumber;
-        evt.AuthKeyId = input.AuthKeyId;
-        evt.PermAuthKeyId = input.PermAuthKeyId;
-        evt.Layer = input.Layer;
-        evt.Date = input.Date;
-        evt.DeviceType = input.DeviceType;
-        evt.ClientIp = input.ClientIp;
-        evt.SessionId = input.SessionId;
-        evt.AccessHashKeyId = input.AccessHashKeyId;
-    }
+    private static MessengerQueryDataReceivedEvent CreateQueryEvent(
+        IRequestInput input, uint objectId, byte[] data) =>
+        new(input.ConnectionId, input.RequestId, objectId, input.UserId, input.ReqMsgId,
+            input.SeqNumber, input.AuthKeyId, input.PermAuthKeyId, data, input.Layer,
+            input.Date, input.DeviceType, input.ClientIp, input.SessionId, input.AccessHashKeyId);
+
+    private static MessengerCommandDataReceivedEvent CreateCommandEvent(
+        IRequestInput input, uint objectId, byte[] data) =>
+        new(input.ConnectionId, input.RequestId, objectId, input.UserId, input.ReqMsgId,
+            input.SeqNumber, input.AuthKeyId, input.PermAuthKeyId, data, input.Layer,
+            input.Date, input.DeviceType, input.ClientIp, input.SessionId, input.AccessHashKeyId);
+
+    private static StickerDataReceivedEvent CreateStickerEvent(
+        IRequestInput input, uint objectId, byte[] data) =>
+        new(input.ConnectionId, input.RequestId, objectId, input.UserId, input.ReqMsgId,
+            input.SeqNumber, input.AuthKeyId, input.PermAuthKeyId, data, input.Layer,
+            input.Date, input.DeviceType, input.ClientIp, input.SessionId, input.AccessHashKeyId);
 }

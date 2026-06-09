@@ -38,7 +38,13 @@ public sealed class BindTempAuthKeyHandler : ISessionHandler<RequestBindTempAuth
         if (permItem?.UserId > 0)
         {
             _authKeyHelper.UpdateUserId(tempAuthKeyId, permItem.UserId);
-            await _sessionService.BindUserIdToSessionAsync(tempAuthKeyId, permItem.UserId, 0)
+            var accessHashKeyId = _authKeyHelper.GetOrCreateAccessHashKeyId(tempAuthKeyId);
+            if (accessHashKeyId == 0)
+            {
+                accessHashKeyId = _authKeyHelper.GetOrCreateAccessHashKeyId(permAuthKeyId);
+            }
+
+            await _sessionService.BindUserIdToSessionAsync(tempAuthKeyId, permItem.UserId, accessHashKeyId)
                 .ConfigureAwait(false);
         }
 

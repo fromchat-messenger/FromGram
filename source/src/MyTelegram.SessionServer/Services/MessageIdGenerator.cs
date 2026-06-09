@@ -13,20 +13,21 @@ public static class MessageIdGenerator
     {
         var unixSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var seq = Interlocked.Increment(ref _counter) & 0x7FFFFF; // 23-bit counter
-        // message_id for server messages: high 32 bits = unix time, low 32 bits = counter * 4
-        // The lowest 2 bits determine message type: 0 = response to client, 1 = content-related, etc.
-        return (unixSeconds << 32) | ((seq << 2) & 0xFFFFFFFC);
+        // Server responses to client queries use msg_id where (msg_id % 4) == 1.
+        var messageId = (unixSeconds << 32) | ((seq << 2) & 0xFFFFFFFC);
+        if ((messageId & 3) != 1)
+            messageId += 1;
+        return messageId;
     }
 
     /// <summary>
     /// Validates a client-supplied message_id.
-    /// Client message_ids must satisfy: (msg_id % 4) == 1 or 3.
+    /// Client message_ids must be divisible by 4 (see MTProto message identifier rules).
     /// Additionally, msg_id should be reasonably close to server time.
     /// </summary>
     public static bool IsValidClientMessageId(long messageId)
     {
-        var mod4 = messageId & 3;
-        if (mod4 != 1 && mod4 != 3)
+        if ((messageId & 3) != 0)
             return false;
 
         // Check that the timestamp portion is within ±300 seconds of now

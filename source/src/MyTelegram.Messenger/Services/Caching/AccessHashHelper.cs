@@ -114,11 +114,13 @@ internal sealed class AccessHashHelper(
         {
             case AccessHashType.User:
             case AccessHashType.Channel:
-                // Try new session-based access hash first
-                var isValidForCurrentSession = await accessHashHelper2.IsAccessHashValidAsync(request, id, accessHash, accessHashType);
-                if (isValidForCurrentSession)
+                if (request.AccessHashKeyId != 0)
                 {
-                    return true;
+                    var isValidForCurrentSession = await accessHashHelper2.IsAccessHashValidAsync(request, id, accessHash, accessHashType);
+                    if (isValidForCurrentSession)
+                    {
+                        return true;
+                    }
                 }
                 // Fallback: check against stored access hash (for backward compatibility and different sessions)
                 break;

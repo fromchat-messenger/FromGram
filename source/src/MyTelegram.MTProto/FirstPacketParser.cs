@@ -1,4 +1,4 @@
-﻿namespace MyTelegram.MTProto;
+namespace MyTelegram.MTProto;
 
 public class FirstPacketParser(
     ILogger<FirstPacketParser> logger,
@@ -15,75 +15,75 @@ public class FirstPacketParser(
 
     public FirstPacketData Parse(ReadOnlySpan<byte> firstPacket)
     {
-        //if (firstPacket.Length == 4 || firstPacket.Length == 1)
-        //{
-        //    return ParseUnObfuscationFirstPacket(ref firstPacket);
-        //}
-
-        //if (firstPacket.Length < 64)
-        //{
-        //    firstPacket.Dump();
-        //    throw new ArgumentException($"Invalid first packet size:{firstPacket.Length}");
-        //}
+        logger.LogInformation("DEBUG: [1] Received {Len} bytes: {Hex}", firstPacket.Length, Convert.ToHexString(firstPacket));
 
         if (firstPacket.Length < ConnectionPrefixBytes)
         {
             return ParseUnObfuscationFirstPacket(firstPacket);
         }
 
-        // https://corefork.telegram.org/mtproto/mtproto-transports#transport-obfuscation
         var nonce = firstPacket[..ConnectionPrefixBytes];
         var sendKey = firstPacket.Slice(8, 32).ToArray();
         var sendIv = firstPacket.Slice(40, 16).ToArray();
+        
+        logger.LogInformation("DEBUG: [2] SendKey: {K}", Convert.ToHexString(sendKey));
+        logger.LogInformation("DEBUG: [3] SendIv: {IV}", Convert.ToHexString(sendIv));
 
+        // Правильный реверс для receiveKey/IV (согласно спецификации MTProto)
         Span<byte> reversedBytes = stackalloc byte[48];
-        firstPacket.Slice(8, 48).CopyTo(reversedBytes);
-        reversedBytes.Reverse();
+        for (int i = 0; i < 48; i++)
+        {
+            reversedBytes[i] = firstPacket[8 + (47 - i)];
+        }
+        
+        logger.LogInformation("DEBUG: [4] ReversedBytes: {RB}", Convert.ToHexString(reversedBytes));
 
         var receiveKey = reversedBytes[..32].ToArray();
         var receiveIv = reversedBytes.Slice(32, 16).ToArray();
 
+        logger.LogInformation("DEBUG: [5] Final ReceiveKey: {K}", Convert.ToHexString(receiveKey));
+        logger.LogInformation("DEBUG: [6] Final ReceiveIv: {IV}", Convert.ToHexString(receiveIv));
+
         var encryptedNonce = ArrayPool<byte>.Shared.Rent(nonce.Length);
         try
         {
+            logger.LogInformation("DEBUG: [7] Starting AES-CTR decryption");
             aesHelper.CtrEncrypt(nonce, encryptedNonce, sendKey, sendIv, 0);
+
+            logger.LogInformation("DEBUG: [8] Decrypted Nonce (first 64 bytes): {Hex}", Convert.ToHexString(encryptedNonce.AsSpan(0, 64)));
 
             var data = new FirstPacketData
             {
                 ObfuscationEnabled = true,
                 ProtocolBufferLength = ConnectionPrefixBytes,
-                SendCount = (uint)nonce.Length
+                // Client advances only the send (encrypt) CTR stream by 64 while building the init packet.
+                // decryptNum stays at 0 until the first server response is received.
+                SendCount = ConnectionPrefixBytes,
+                ReceiveCount = 0
             };
-
             var protocolBytes = encryptedNonce.AsSpan().Slice(56, 4);
 
-            switch (protocolBytes)
-            {
-                case [AbridgedFlag, AbridgedFlag, AbridgedFlag, AbridgedFlag]:
-                    data.ProtocolType = ProtocolType.Abridge;
-                    break;
-                case [IntermediateFlag, IntermediateFlag, IntermediateFlag, IntermediateFlag]:
-                    data.ProtocolType = ProtocolType.Intermediate;
-                    break;
-                default:
-                    logger.LogWarning("Unknown protocol: {nonce56:x} {nonce57:x} {nonce58:x} {nonce59:x}",
-                        protocolBytes[0],
-                        protocolBytes[1],
-                        protocolBytes[2],
-                        protocolBytes[3]);
-                    break;
-            }
+            if (protocolBytes.SequenceEqual([AbridgedFlag, AbridgedFlag, AbridgedFlag, AbridgedFlag]))
+                data.ProtocolType = ProtocolType.Abridge;
+            else if (protocolBytes.SequenceEqual([IntermediateFlag, IntermediateFlag, IntermediateFlag, IntermediateFlag]))
+                data.ProtocolType = ProtocolType.Intermediate;
 
             if (data.ProtocolType != ProtocolType.Unknown)
             {
-                var dcId = BitConverter.ToInt16(encryptedNonce, 60);
-                logger.LogInformation("[{ProtocolType}] Protocol detected, dcId: {DcId} bytes: {Bytes}", data.ProtocolType, dcId, firstPacket.Length);
+                if (encryptedNonce[56] == 0xef && encryptedNonce[57] == 0xef && 
+                    encryptedNonce[58] == 0xef && encryptedNonce[59] == 0xef) 
+                {
+                    // Это маркер конца обфускации. 
+                    // Настоящий dcId будет прислан СЕРВЕРОМ в ответе на ReqPq, 
+                    // либо он уже определен на стороне клиента.
+                    logger.LogInformation("Obfuscation handshake complete. DC ID not in this packet.");
+                }
+                
                 data.SendKey = sendKey;
                 data.SendIv = sendIv;
                 data.ReceiveKey = receiveKey;
-                data.ReceiveIv =receiveIv;
+                data.ReceiveIv = receiveIv;
             }
-
             return data;
         }
         finally

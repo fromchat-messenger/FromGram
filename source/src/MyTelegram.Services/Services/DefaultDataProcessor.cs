@@ -16,6 +16,8 @@ public class DefaultDataProcessor<TData>(
     {
         Task.Run(async () =>
         {
+            LogToRoot($"DEBUG: ProcessAsync called. ConnectionId: {obj.ConnectionId}, Data Length: {obj.Data.Length}");
+            
             var sw = Stopwatch.StartNew();
             if (handlerHelper.TryGetHandler(obj.ObjectId, out var handler))
             {
@@ -115,8 +117,32 @@ public class DefaultDataProcessor<TData>(
         return Task.CompletedTask;
     }
 
+    private void LogToRoot(string message)
+    {
+        // Запись в файл прямо в рабочую директорию контейнера
+        string path = "debug_invoke.log";
+
+        try
+        {
+            // Используем true для дозаписи в файл (Append)
+            using (StreamWriter sw = new StreamWriter(path, true))
+            {
+                sw.WriteLine($"{DateTime.Now:yyyy-MM-dd HH:mm:ss} | {message}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[CRITICAL] Ошибка записи в файл: {ex.Message}");
+        }
+
+        Console.WriteLine(message);
+    }
+
     protected virtual IObject GetData(TData obj)
     {
+        string hexData = Convert.ToHexString(obj.Data.Span);
+        LogToRoot($"DEBUG: Data length is {obj.Data.Length}. bytes: {hexData}");
+
         return obj.Data.ToTObject<IObject>();
     }
 

@@ -69,6 +69,8 @@ public static class MyTelegramHandlerServicesExtensions
         services.AddTransient<IQueryOnlyReadModelStore<ChannelReadModel>, MongoDbQueryOnlyReadModelStore<ChannelReadModel>>();
         services.AddTransient<IQueryHandler<GetMonoforumQuery, Monoforum>, GetMonoforumQueryHandler>();
 
+        services.AddScoped<IInvokeWithLayerHandler, InvokeWithLayerHandler>();
+
         return services;
     }
 }

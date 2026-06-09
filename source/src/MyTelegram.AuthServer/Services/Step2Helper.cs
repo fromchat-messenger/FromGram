@@ -1,4 +1,4 @@
-﻿namespace MyTelegram.AuthServer.Services;
+namespace MyTelegram.AuthServer.Services;
 
 public class Step2Helper(
     ILogger<Step2Helper> logger,
@@ -174,9 +174,7 @@ public class Step2Helper(
                 throw new ArgumentException("PQInnerData hash mismatch");
             }
 
-            var tPqInnerData = tempBytes.ToTObject<IPQInnerData>();
-
-            return tPqInnerData;
+            return dataWithPadding.ToArray().ToTObject<IPQInnerData>();
         }
         finally
         {

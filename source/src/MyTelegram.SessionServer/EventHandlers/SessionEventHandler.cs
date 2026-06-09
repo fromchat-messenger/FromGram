@@ -20,15 +20,16 @@ public sealed class SessionEventHandler :
     IEventHandler<SessionPasswordStateChangedEvent>,
     IEventHandler<SetSessionPasswordStateEvent>,
     IEventHandler<UserSignInSuccessEvent>,
+    IEventHandler<UserSignUpSuccessIntegrationEvent>,
     IEventHandler<UnRegisterAuthKeyEvent>,
     IEventHandler<SessionRevokedEvent>,
-    IEventHandler<AuthKeyNotFoundEvent>,
     IEventHandler<DataResultResponseReceivedEvent>,
     IEventHandler<LayeredPushMessageCreatedIntegrationEvent>,
     IEventHandler<ChatMemberChangedEvent>,
     IEventHandler<ChannelMemberChangedEvent>
 {
     private readonly IAuthKeyHelper _authKeyHelper;
+    private readonly IAuthKeyIdHelper _authKeyIdHelper;
     private readonly ISessionService _sessionService;
     private readonly IOnlineUserHelper _onlineUserHelper;
     private readonly IChatMemberHelper _chatMemberHelper;
@@ -38,6 +39,7 @@ public sealed class SessionEventHandler :
 
     public SessionEventHandler(
         IAuthKeyHelper authKeyHelper,
+        IAuthKeyIdHelper authKeyIdHelper,
         ISessionService sessionService,
         IOnlineUserHelper onlineUserHelper,
         IChatMemberHelper chatMemberHelper,
@@ -46,6 +48,7 @@ public sealed class SessionEventHandler :
         ILogger<SessionEventHandler> logger)
     {
         _authKeyHelper = authKeyHelper;
+        _authKeyIdHelper = authKeyIdHelper;
         _sessionService = sessionService;
         _onlineUserHelper = onlineUserHelper;
         _chatMemberHelper = chatMemberHelper;
@@ -57,8 +60,7 @@ public sealed class SessionEventHandler :
     /// <summary>A new auth key was created by the AuthServer.</summary>
     public Task HandleEventAsync(AuthKeyCreatedIntegrationEvent e)
     {
-        var authKeyId = System.Buffers.Binary.BinaryPrimitives.ReadInt64LittleEndian(
-            e.Data.Span.Length >= 8 ? e.Data.Span : stackalloc byte[8]);
+        var authKeyId = _authKeyIdHelper.GetAuthKeyId(e.Data);
 
         _authKeyHelper.SetAuthKeyItem(authKeyId, new AuthKeyItem
         {
@@ -69,8 +71,9 @@ public sealed class SessionEventHandler :
             IsActive = true
         });
 
-        _logger.LogInformation("Auth key created: authKeyId={AuthKeyId} isPerm={IsPermanent}",
-            authKeyId, e.IsPermanent);
+        _logger.LogInformation(
+            "Auth key created: authKeyId={AuthKeyId:x16} isPerm={IsPermanent} conn={ConnectionId}",
+            authKeyId, e.IsPermanent, e.ConnectionId);
         return Task.CompletedTask;
     }
 
@@ -91,13 +94,13 @@ public sealed class SessionEventHandler :
         _authKeyHelper.UpdateUserId(e.TempAuthKeyId, e.UserId);
         _authKeyHelper.UpdateUserId(e.PermAuthKeyId, e.UserId);
 
-        return _sessionService.BindUserIdToSessionAsync(e.TempAuthKeyId, e.UserId, 0);
+        return BindUserToSessionAsync(e.TempAuthKeyId, e.PermAuthKeyId, e.UserId);
     }
 
     /// <summary>User session binding — update online status.</summary>
     public async Task HandleEventAsync(BindUserIdToSessionEvent e)
     {
-        await _sessionService.BindUserIdToSessionAsync(e.AuthKeyId, e.UserId, 0).ConfigureAwait(false);
+        await BindUserToSessionAsync(e.AuthKeyId, e.PermAuthKeyId, e.UserId).ConfigureAwait(false);
         _onlineUserHelper.SetOnline(e.UserId, e.AuthKeyId);
 
         _logger.LogDebug("BindUserIdToSession: userId={UserId} authKey={AuthKeyId}", e.UserId, e.AuthKeyId);
@@ -157,7 +160,7 @@ public sealed class SessionEventHandler :
         _authKeyHelper.UpdateUserId(e.TempAuthKeyId, e.UserId);
         _authKeyHelper.UpdateUserId(e.PermAuthKeyId, e.UserId);
 
-        await _sessionService.BindUserIdToSessionAsync(e.TempAuthKeyId, e.UserId, 0).ConfigureAwait(false);
+        await BindUserToSessionAsync(e.TempAuthKeyId, e.PermAuthKeyId, e.UserId).ConfigureAwait(false);
 
         var session = _sessionService.GetSession(e.TempAuthKeyId);
         if (session != null)
@@ -167,6 +170,20 @@ public sealed class SessionEventHandler :
 
         _logger.LogInformation("User sign-in success: userId={UserId} tempAuth={TempAuthKeyId}",
             e.UserId, e.TempAuthKeyId);
+    }
+
+    /// <summary>User successfully signed up — bind auth key and session like sign-in.</summary>
+    public async Task HandleEventAsync(UserSignUpSuccessIntegrationEvent e)
+    {
+        _authKeyHelper.UpdateUserId(e.TempAuthKeyId, e.UserId);
+        _authKeyHelper.UpdateUserId(e.PermAuthKeyId, e.UserId);
+
+        await BindUserToSessionAsync(e.TempAuthKeyId, e.PermAuthKeyId, e.UserId).ConfigureAwait(false);
+
+        _onlineUserHelper.SetOnline(e.UserId, e.TempAuthKeyId);
+
+        _logger.LogInformation("User sign-up success: userId={UserId} tempAuth={TempAuthKeyId} permAuth={PermAuthKeyId}",
+            e.UserId, e.TempAuthKeyId, e.PermAuthKeyId);
     }
 
     /// <summary>Auth key unregistered (user logged out from another session).</summary>
@@ -205,12 +222,6 @@ public sealed class SessionEventHandler :
         _logger.LogInformation("Sessions revoked for userId={UserId}, count={Count}",
             e.UserId, e.RevokedPermAuthKeyIdList.Count);
         return Task.CompletedTask;
-    }
-
-    /// <summary>Auth key was not found during request processing.</summary>
-    public Task HandleEventAsync(AuthKeyNotFoundEvent e)
-    {
-        return _messageSender.SendAuthKeyNotFoundMessageToClientAsync(e.AuthKeyId, e.ConnectionId);
     }
 
     /// <summary>RPC result received from the Messenger server — forward to client.</summary>
@@ -287,6 +298,24 @@ public sealed class SessionEventHandler :
             default:
                 _chatMemberHelper.SetMembers(chatId, memberIds);
                 break;
+        }
+    }
+
+    private async Task BindUserToSessionAsync(long tempAuthKeyId, long permAuthKeyId, long userId)
+    {
+        var accessHashKeyId = _authKeyHelper.GetOrCreateAccessHashKeyId(tempAuthKeyId);
+        if (accessHashKeyId == 0 && permAuthKeyId != 0)
+        {
+            accessHashKeyId = _authKeyHelper.GetOrCreateAccessHashKeyId(permAuthKeyId);
+        }
+
+        await _sessionService.BindUserIdToSessionAsync(tempAuthKeyId, userId, accessHashKeyId)
+            .ConfigureAwait(false);
+
+        if (permAuthKeyId != 0 && permAuthKeyId != tempAuthKeyId)
+        {
+            await _sessionService.BindUserIdToSessionAsync(permAuthKeyId, userId, accessHashKeyId)
+                .ConfigureAwait(false);
         }
     }
 }

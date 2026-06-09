@@ -12,9 +12,10 @@ namespace MyTelegram.Messenger.Handlers.LatestLayer.Impl.Auth;
 internal sealed class BindTempAuthKeyHandler : RpcResultObjectHandler<MyTelegram.Schema.Auth.RequestBindTempAuthKey, IBool>,
     Auth.IBindTempAuthKeyHandler
 {
-    protected override Task<IBool> HandleCoreAsync(IRequestInput input,
+    protected override async Task<IBool> HandleCoreAsync(IRequestInput input,
         MyTelegram.Schema.Auth.RequestBindTempAuthKey obj)
     {
-        throw new NotImplementedException();
+        // TODO implement, for now returning True to make client just work.
+        return new TBoolTrue();
     }
 }

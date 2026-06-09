@@ -41,9 +41,55 @@ public sealed class RequestInvokeWithLayer : IRequest<IObject>, IHasSubQuery
         writer.Write(Query);
     }
 
+    private void LogToRoot(string message)
+    {
+        // Запись в файл прямо в рабочую директорию контейнера
+        string path = "debug_invoke.log";
+        try 
+        {
+            // Используем true для дозаписи в файл (Append)
+            using (StreamWriter sw = new StreamWriter(path, true))
+            {
+                sw.WriteLine($"{DateTime.Now:yyyy-MM-dd HH:mm:ss} | {message}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[CRITICAL] Ошибка записи в файл: {ex.Message}");
+        }
+
+        Console.WriteLine(message);
+    }
+
     public void Deserialize(ref ReadOnlyMemory<byte> buffer)
     {
+        // Выводим дамп всего буфера, который пришел
+        string hexDump = Convert.ToHexString(buffer.Span);
+        LogToRoot($"[DEBUG] InvokeWithLayer Deserialize | Buffer Length: {buffer.Length} | Hex: {hexDump}");
+
         Layer = buffer.ReadInt32();
+        // Найди место, где вызывается Read<IObject>
+        // И оберни его:
+
+        var constructorId = BitConverter.ToUInt32(buffer.Span.Slice(0, 4));
+        LogToRoot($"[CRITICAL-DEBUG] Incoming ConstructorId: 0x{constructorId:x8}");
+
+        if (constructorId != 0xda9b0d0d) // 0xda9b0d0d — это ID InvokeWithLayer
+        {
+            LogToRoot($"[CRITICAL-DEBUG] ОЖИДАЛСЯ InvokeWithLayer, но пришел: 0x{constructorId:x8}");
+        }
+
+        LogToRoot($"[CRITICAL-DEBUG] Full Packet Hex: {Convert.ToHexString(buffer.Span)}");
+
         Query = buffer.Read<IObject>();
+        
+        if (Query == null) 
+        {
+            LogToRoot("[DEBUG] InvokeWithLayer FAILED to read Query object!");
+        }
+        else 
+        {
+            LogToRoot($"[DEBUG] InvokeWithLayer Query read successfully. Type: {Query.GetType().Name}, ID: 0x{Query.ConstructorId:x8}");
+        }
     }
 }

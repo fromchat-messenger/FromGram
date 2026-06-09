@@ -8,6 +8,17 @@ public class AuthKeyNotFoundEventHandler(IClientDataSender clientDataSender, ICl
 
     public async Task HandleEventAsync(AuthKeyNotFoundEvent eventData)
     {
+        // During DH handshake the connection has no auth key yet; -404 would abort the handshake loop.
+        if (eventData.AuthKeyId == 0)
+        {
+            return;
+        }
+
+        if (!clientManager.TryGetClientData(eventData.ConnectionId, out _))
+        {
+            return;
+        }
+
         var m = new EncryptedMessageResponse(eventData.AuthKeyId, AuthKeyNotFoundData, eventData.ConnectionId, 2);
         await clientDataSender.SendAsync(m);
     }

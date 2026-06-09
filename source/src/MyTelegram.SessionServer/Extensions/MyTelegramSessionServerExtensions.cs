@@ -1,3 +1,4 @@
+using MyTelegram.Abstractions;
 using MyTelegram.Core;
 using MyTelegram.EventBus;
 using MyTelegram.EventBus.Extensions;
@@ -62,8 +63,12 @@ public static class MyTelegramSessionServerExtensions
 
         // Event handlers
         services.AddTransient<SessionEventHandler>();
+        services.AddTransient<EncryptedMessageEventHandler>();
 
-        // Event subscriptions (16 event types → SessionEventHandler)
+        // Event subscriptions
+        services.AddSubscription<EncryptedMessage, EncryptedMessageEventHandler>();
+
+        // Integration events (16 event types → SessionEventHandler)
         services.AddSubscription<AuthKeyCreatedIntegrationEvent, SessionEventHandler>();
         services.AddSubscription<BindUserIdToAuthKeyIntegrationEvent, SessionEventHandler>();
         services.AddSubscription<BindUserIdToAuthKeySuccessEvent, SessionEventHandler>();
@@ -73,9 +78,11 @@ public static class MyTelegramSessionServerExtensions
         services.AddSubscription<SessionPasswordStateChangedEvent, SessionEventHandler>();
         services.AddSubscription<SetSessionPasswordStateEvent, SessionEventHandler>();
         services.AddSubscription<UserSignInSuccessEvent, SessionEventHandler>();
+        services.AddSubscription<UserSignUpSuccessIntegrationEvent, SessionEventHandler>();
         services.AddSubscription<UnRegisterAuthKeyEvent, SessionEventHandler>();
         services.AddSubscription<SessionRevokedEvent, SessionEventHandler>();
-        services.AddSubscription<AuthKeyNotFoundEvent, SessionEventHandler>();
+        // AuthKeyNotFoundEvent is published by MessageSender2 for the gateway only;
+        // session-server must NOT subscribe (would republish and loop).
         services.AddSubscription<DataResultResponseReceivedEvent, SessionEventHandler>();
         services.AddSubscription<LayeredPushMessageCreatedIntegrationEvent, SessionEventHandler>();
         services.AddSubscription<ChatMemberChangedEvent, SessionEventHandler>();

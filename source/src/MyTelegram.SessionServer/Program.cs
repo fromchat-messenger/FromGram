@@ -29,7 +29,9 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
 // 3. MongoDB
 builder.Services.AddSingleton<IMongoClient>(sp =>
 {
-    var connectionString = builder.Configuration["MongoDB:Connection"] ?? "mongodb://localhost:27017";
+    var connectionString = builder.Configuration["MongoDB:Connection"]
+        ?? builder.Configuration.GetConnectionString("Default")
+        ?? "mongodb://localhost:27017";
     return new MongoClient(connectionString);
 });
 builder.Services.AddSingleton(sp =>

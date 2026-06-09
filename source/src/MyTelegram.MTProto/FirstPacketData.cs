@@ -10,4 +10,5 @@ public class FirstPacketData
     public byte[] SendIv { get; set; } = [];
     public int ProtocolBufferLength { get; set; }
     public ulong SendCount { get; set; }
+    public ulong ReceiveCount { get; set; }
 }

@@ -16,6 +16,7 @@ public interface IAuthKeyHelper
     void UpdateLayer(long authKeyId, int layer);
     void UpdateServerSalt(long authKeyId, long serverSalt);
     void UpdateAccessHashKeyId(long authKeyId, long accessHashKeyId);
+    long GetOrCreateAccessHashKeyId(long authKeyId);
     void UpdateDeviceType(long authKeyId, DeviceType deviceType);
 
     long GetPermAuthKeyId(long tempAuthKeyId);

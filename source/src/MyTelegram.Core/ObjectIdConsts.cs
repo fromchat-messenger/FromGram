@@ -150,6 +150,7 @@ public partial class ObjectIdConsts
       { 0x32d439a4, "SendEncryptedServiceHandler"},
       { 0xa550cd78, "SendMediaHandler"},
       { 0xfbf2340a, "SendMessageHandler"},
+      { 0xfe05dc9a, "SendMessageHandler"},
       { 0x1bf89d74, "SendMultiMediaHandler"},
       { 0x58bbcb50, "SendPaidReactionHandler"},
       { 0x6c750de1, "SendQuickReplyMessagesHandler"},

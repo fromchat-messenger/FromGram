@@ -60,6 +60,38 @@ public sealed class AuthKeyHelper : IAuthKeyHelper
             item.AccessHashKeyId = accessHashKeyId;
     }
 
+    public long GetOrCreateAccessHashKeyId(long authKeyId)
+    {
+        if (!_cache.TryGetValue(authKeyId, out var item))
+        {
+            return 0;
+        }
+
+        if (item.AccessHashKeyId != 0)
+        {
+            return item.AccessHashKeyId;
+        }
+
+        var accessHashKeyId = Random.Shared.NextInt64();
+        item.AccessHashKeyId = accessHashKeyId;
+
+        if (item.PermAuthKeyId != 0 && item.PermAuthKeyId != authKeyId
+            && _cache.TryGetValue(item.PermAuthKeyId, out var permItem)
+            && permItem.AccessHashKeyId == 0)
+        {
+            permItem.AccessHashKeyId = accessHashKeyId;
+        }
+
+        if (item.TempAuthKeyId != 0 && item.TempAuthKeyId != authKeyId
+            && _cache.TryGetValue(item.TempAuthKeyId, out var tempItem)
+            && tempItem.AccessHashKeyId == 0)
+        {
+            tempItem.AccessHashKeyId = accessHashKeyId;
+        }
+
+        return accessHashKeyId;
+    }
+
     public void UpdateDeviceType(long authKeyId, DeviceType deviceType)
     {
         if (_cache.TryGetValue(authKeyId, out var item))

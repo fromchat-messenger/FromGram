@@ -140,9 +140,9 @@ public sealed class EncryptedMessageProcessor : IEncryptedMessageProcessor
 
             if (badMsg != null)
             {
-                await _messageSender.SendRpcMessageToClientAsync(
-                    connectionId, messageId, authKeyId, sessionId,
-                    badMsg, seqNumber + 1).ConfigureAwait(false);
+                await SendBadMsgNotificationAsync(
+                    connectionId, authKeyId, sessionId, badMsg, seqNumber)
+                    .ConfigureAwait(false);
                 return;
             }
 
@@ -390,20 +390,15 @@ public sealed class EncryptedMessageProcessor : IEncryptedMessageProcessor
         long sessionId, long messageId, int seqNo,
         long serverSalt, long clientServerSalt)
     {
-        // Check server salt match
-        if (serverSalt != clientServerSalt && clientServerSalt != 0)
+        // The Android client keeps a datacenter-wide salt pool (from parallel handshakes).
+        // Accept the client's salt and sync our stored value instead of rejecting with
+        // bad_server_salt (which must be sent as a bare service message, not rpc_result).
+        if (clientServerSalt != 0 && serverSalt != clientServerSalt)
         {
-            _logger.LogWarning(
-                "Bad server salt: expected={Expected} got={Got} authKey={AuthKeyId}",
-                serverSalt, clientServerSalt, authKeyId);
-            // Return bad_server_salt notification
-            return new TBadServerSalt
-            {
-                BadMsgId = messageId,
-                BadMsgSeqno = seqNo,
-                ErrorCode = 48,
-                NewServerSalt = serverSalt
-            };
+            _logger.LogDebug(
+                "Syncing server salt for authKey={AuthKeyId}: stored={Stored} client={Client}",
+                authKeyId, serverSalt, clientServerSalt);
+            _authKeyHelper.UpdateServerSalt(authKeyId, clientServerSalt);
         }
 
         // Check message_id validity
@@ -421,6 +416,18 @@ public sealed class EncryptedMessageProcessor : IEncryptedMessageProcessor
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// MTProto service notifications (bad_msg_*, bad_server_salt) must not be wrapped in rpc_result.
+    /// </summary>
+    private Task SendBadMsgNotificationAsync(
+        string connectionId, long authKeyId, long sessionId,
+        IObject notification, int clientSeqNo)
+    {
+        return _messageSender.SendMessageToConnectionAsync(
+            connectionId, authKeyId, sessionId,
+            notification, clientSeqNo + 1, 0, null, 0, 0);
     }
 
     #endregion
@@ -467,30 +474,7 @@ public sealed class EncryptedMessageProcessor : IEncryptedMessageProcessor
             ConnectionType = connectionType
         };
 
-        // Check server salt validity; refresh if needed
-        await CheckCachedServerSaltAsync(authKeyId, serverSalt).ConfigureAwait(false);
-
         return newSession;
-    }
-
-    private async Task CheckCachedServerSaltAsync(long authKeyId, long currentSalt)
-    {
-        try
-        {
-            var now = (int)DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            var salts = await _serverSaltHelper.GetOrCreateCachedFutureSaltsAsync(authKeyId, 8)
-                .ConfigureAwait(false);
-
-            var validSalt = salts.Find(p => p.ValidSince <= now && now <= p.ValidUntil);
-            if (validSalt != null)
-            {
-                _authKeyHelper.UpdateServerSalt(authKeyId, validSalt.Salt);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to check cached server salt for authKey={AuthKeyId}", authKeyId);
-        }
     }
 
     #endregion

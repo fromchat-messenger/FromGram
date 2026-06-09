@@ -1,4 +1,4 @@
-﻿namespace MyTelegram.AuthServer.Handlers;
+namespace MyTelegram.AuthServer.Handlers;
 
 public class SetClientDhParamsHandler(
     IStep3Helper step3ServerHelper,
@@ -15,8 +15,8 @@ public class SetClientDhParamsHandler(
         var dto = await step3ServerHelper.SetClientDhParamsAnswerAsync(obj);
         logger.LogInformation(
             "[Step3] [{IsPerm}] authKey created successfully, connectionId: {ConnectionId}, authKeyId: {AuthKeyId:x2}, reqMsgId: {ReqMsgId}",
-            input.ConnectionId,
             dto.IsPermanent ? "Perm" : "Temp",
+            input.ConnectionId,
             dto.AuthKeyId,
             input.ReqMsgId
         );
@@ -40,12 +40,7 @@ public class SetClientDhParamsHandler(
             )
         );
 
-        // The session server will send SetClientDhParamsAnswer to client if the perm auth key created on session server
-        if (!dto.IsPermanent)
-        {
-            return dto.SetClientDhParamsAnswer;
-        }
-
-        return null!;
+        // Always return the answer to the gateway; the session server only registers the new auth key.
+        return dto.SetClientDhParamsAnswer;
     }
 }
